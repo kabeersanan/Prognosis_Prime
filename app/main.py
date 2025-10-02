@@ -19,6 +19,12 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+from fastapi.responses import FileResponse
+
+# Serve the index.html file at the root URL
+@app.get("/", response_class=FileResponse)
+async def read_index():
+    return "app/static/index.html"
 
 # Serve static files from app/static
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
