@@ -1,0 +1,127 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Disease Predictor — Select Symptoms</title>
+  <style>
+    body { font-family: system-ui, -apple-system, "Times New Roman", Roboto, "Helvetica Neue", Arial; max-width:900px; margin:28px auto; padding:10px; }
+    h1 { margin-bottom:6px; }
+    p.lead { color:#444; margin-top:0; }
+    .controls { display:flex; gap:12px; align-items:flex-start; margin-top:18px; }
+    .left { flex:1; }
+    .right { width:320px; }
+    select { width:100%; height:360px; padding:6px; border:1px solid #ccc; border-radius:6px; background:#fff; }
+    input[type="text"] { width:100%; padding:8px; border-radius:6px; border:1px solid #ccc; margin-bottom:8px; }
+    button { width:100%; padding:12px; border-radius:8px; border:0; background:#2b6cb0; color:#fff; font-size:16px; cursor:pointer; }
+    #result { margin-top:14px; white-space:pre-wrap; padding:12px; background:#f6f8fb; border-radius:6px; border:1px solid #e6edf6; min-height:48px; }
+    .small { font-size:0.9rem; color:#666; margin-top:6px; }
+  </style>
+</head>
+<body>
+  <h1>Disease Predictor</h1>
+  <p class="lead">Pick symptoms from the list (you can select multiple). Use the search box to quickly filter symptoms.</p>
+
+  <div class="controls">
+    <div class="left">
+      <input id="symptomFilter" placeholder="Search your symptoms" />
+      <select id="symptomList" multiple></select>
+      <div class="small">Tip: hold Ctrl (Windows) / Cmd (Mac) or use click+drag to select multiple, or use the filter above.</div>
+    </div>
+
+    <div class="right">
+      <button id="predictBtn">Predict</button>
+      <button id="clearBtn" style="margin-top:8px; background:#e2e8f0; color:#111;">Clear selection</button>
+      <div id="result">Results will appear here.</div>
+    </div>
+  </div>
+
+<script>
+async function loadSymptoms(){
+  const res = await fetch('/symptoms');
+  if(!res.ok){
+    document.getElementById('result').textContent = "Failed to load symptoms: " + (await res.text());
+    return;
+  }
+  const data = await res.json();
+  const list = document.getElementById('symptomList');
+  list.innerHTML = "";
+  data.symptoms.forEach(s => {
+    const opt = document.createElement('option');
+    opt.value = s;
+    opt.textContent = s;
+    list.appendChild(opt);
+  });
+}
+
+// Filter the options in the multi-select
+function applyFilter(){
+  const q = document.getElementById('symptomFilter').value.trim().toLowerCase();
+  const list = document.getElementById('symptomList');
+  for (let i = 0; i < list.options.length; i++){
+    const o = list.options[i];
+    if (!q || o.text.toLowerCase().includes(q)) {
+      o.style.display = '';
+    } else {
+      o.style.display = 'none';
+      o.selected = false; // hide and unselect
+    }
+  }
+}
+
+// Helper: get selected option values as array
+function getSelectedSymptoms(){
+  const list = document.getElementById('symptomList');
+  const out = [];
+  for (let i = 0; i < list.options.length; i++){
+    const o = list.options[i];
+    if (o.selected && o.style.display !== 'none') out.push(o.value);
+  }
+  return out;
+}
+
+async function predict(){
+  const resultEl = document.getElementById('result');
+  const selected = getSelectedSymptoms();
+  if (selected.length === 0) {
+    resultEl.textContent = "Please select at least one symptom from the list.";
+    return;
+  }
+  resultEl.textContent = "Predicting...";
+  try {
+    const res = await fetch('/predict', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ symptoms: selected })
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      resultEl.textContent = "Error: " + (data.error || JSON.stringify(data));
+      return;
+    }
+    // Pretty print results
+    let out = "Predictions:\n\n";
+    out += "SVM: " + data.svm_model_prediction + "\n";
+    out += "Naive Bayes: " + data.naive_bayes_prediction + "\n";
+    out += "RandomForest: " + data.rf_model_prediction + "\n\n";
+    out += "Final Diagnosis: " + data.final_prediction + "\n";
+    resultEl.textContent = out;
+  } catch (err) {
+    resultEl.textContent = "Network error: " + err;
+  }
+}
+
+document.getElementById('symptomFilter').addEventListener('input', applyFilter);
+document.getElementById('predictBtn').addEventListener('click', predict);
+document.getElementById('clearBtn').addEventListener('click', () => {
+  const list = document.getElementById('symptomList');
+  for (let i=0;i<list.options.length;i++) list.options[i].selected = false;
+  document.getElementById('result').textContent = "Cleared selection.";
+});
+
+// Load symptoms on page load
+loadSymptoms().catch(e => {
+  document.getElementById('result').textContent = "Failed to fetch symptoms: " + e;
+});
+</script>
+</body>
+</html>
